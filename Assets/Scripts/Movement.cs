@@ -32,7 +32,7 @@ public class Movement : MonoBehaviour
         }
         if (_isMoving)
         {
-            transform.position = _positionReference + _mouseOffset* 0.1f;
+            
         }
     }
 
@@ -56,7 +56,7 @@ public class Movement : MonoBehaviour
             _mouseReference = Input.mousePosition;
             _positionReference = transform.position;
         }
-        if ((_isMoving&Input.GetMouseButtonUp(1)|(_isRotating&Input.GetMouseButtonUp(0))))
+        if ((_isMoving & Input.GetMouseButtonUp(1))|(_isRotating&Input.GetMouseButtonUp(0)))
         {
             _isRotating = Input.GetMouseButton(0);
             _isMoving = Input.GetMouseButton(1);
