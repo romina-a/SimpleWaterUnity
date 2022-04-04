@@ -52,6 +52,7 @@ public class VirtualJoyStick : MonoBehaviour, IPointerUpHandler, IPointerDownHan
 
             pos = pos / pos_limit * sensitivitiy;
 
+            Debug.Log("called with" + pos.ToString());
             directionChageEvents.Invoke(pos);
         }
     }
