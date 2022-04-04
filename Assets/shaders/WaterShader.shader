@@ -1,4 +1,4 @@
-Shader "WaterShader"
+Shader "Romina/WaterShader"
 {
     Properties
     {
@@ -39,9 +39,12 @@ Shader "WaterShader"
 
         Pass
         {
-		 Zwrite ON // ? sets whether the depth buffer contents are updated during rendering normally ZWrite is enabled for opaque objects and disabled for semi-transparent ones
+		 Zwrite off // ? sets whether the depth buffer contents are updated during rendering normally ZWrite is enabled for opaque objects and disabled for semi-transparent ones
+		 Ztest LEqual //ztest does not run on the current object, so if culling is off and ztest is LEqual, the back facing tirangles are renderd on top(?)
 		 Cull off // we want the front and back faces, Culling is an optimization that does not render polygons facing away from the viewer. All polygons have a front and a back side.
-		 AlphaToMask on // transparency
+		 //AlphaToMask off // transparency on top (?)
+		 Blend SrcAlpha OneMinusSrcAlpha
+
          CGPROGRAM
          #pragma vertex vert
          #pragma fragment frag

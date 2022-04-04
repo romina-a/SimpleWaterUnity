@@ -1,4 +1,4 @@
-Shader "WaterShader3"
+Shader "Romina/WaterShader3"
 {
     Properties
     {

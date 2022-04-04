@@ -1,18 +1,12 @@
-Shader "WaterShader4"
+Shader "Romina/Wavy"
 {
     Properties
     {
 		_Color ("Color", Color) = (1,1,1,1)
         _TopColor ("Top Color", Color) = (1,1,1,1)
-        _FillAmount ("Fill Amount", float) = 0.5 // TODO: what can it be?
+        _Wavyness ("Fill Amount", float) = 1 
 		_WaterNormal ("Water Normal", vector) = (0,1,0,0)
-		_XScale ("X Scale", float) = 1
-		_YScale ("Y Scale", float) = 1
-		_ZScale ("Z Scale", float) = 1
 
-		[HideInInspector] _WaterNormalRotationX ("Water Normal Rotation X", Range(0,360)) = 90
-		[HideInInspector] _WaterNormalRotationY ("Water Normal Rotation Y", Range(0,360)) = 0
-		[HideInInspector] _WaterNormalRotationZ ("Water Normal Rotation Z", Range(0,360)) = 90
     }
  
     SubShader
@@ -63,7 +57,7 @@ Shader "WaterShader4"
 			float fillEdge: TEXCOORD2;
 		};
  
-         float _FillAmount, _WaterNormalRotationX, _WaterNormalRotationY, _WaterNormalRotationZ, _XScale, _YScale, _ZScale;
+         float _Wavyness;
          float4 _TopColor, _Color, _WaterNormal;
 		
 
@@ -82,35 +76,7 @@ Shader "WaterShader4"
 			float3 pointOnWaterPlane = ObjectCenter.xyz + l * wn; // world coordinates // TODO --> where should the line be in each direction?
 			float4 vertex_world = mul(unity_ObjectToWorld, v.vertex); // world coordinates
 			float pic = dot((vertex_world.xyz-pointOnWaterPlane.xyz), wn); // if vertex is above the plane pic is positive
-			o.fillEdge = pic;
-			
-			// collapsing the above points on the water plane
-			if (pic > 0)
-			{
-				float4 newvertex;
-				if (0){
-					// reflecting the points above the water plane on the water plane, chosen direction dir
-					// pointOnWaterPlane (.) wn + w = 0
-					float w = - dot(pointOnWaterPlane, wn);
-					float3 dir = (1==0)? float3(0,1,0): mul(unity_ObjectToWorld, float4(0,1,0,0)).xyz; //global y direction or object y direction
-					dir = normalize(dir);
-					
-					// we can see if wn and dir are perpendicular we will have problems
-					newvertex = float4(vertex_world.xyz - (dot(wn,vertex_world)+w)/dot(wn,dir) * dir, 1); // world coordinates
-				}
-				else
-				{
-					// reflecting the points above the water plane on the water plane, plane normal direction
-					newvertex = float4(vertex_world-pic*wn,1); // world coordinates
-				}
-
-				newvertex = mul (unity_WorldToObject, newvertex); // object coordinates
-				pointOnWaterPlane = mul (unity_WorldToObject, pointOnWaterPlane); // object coordinates
-				wn = normalize(mul (unity_WorldToObject, wn)); // object coordinates
-
-				o.fillEdge = 0; 
-				o.vertex = UnityObjectToClipPos(newvertex);
-			}
+			o.fillEdge = pic + _Wavyness*sin(v.vertex.x);
 
             return o;
          }
@@ -118,8 +84,8 @@ Shader "WaterShader4"
          fixed4 frag (v2f i, fixed facing : VFACE) : SV_Target
          {
 
-		  //float result = step(i.fillEdge, 0);
-		  return i.fillEdge < 0 ?  _Color: i.fillEdge < 0.05? _TopColor : float4(0, 0, 0, 0);  
+		  float result = step(i.fillEdge, 0);
+		  return i.fillEdge < 0 ?  result*_Color: result* _TopColor;
 
 		  // return _Color;
          }
