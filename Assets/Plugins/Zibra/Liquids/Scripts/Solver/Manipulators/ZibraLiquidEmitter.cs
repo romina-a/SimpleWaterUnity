@@ -1,71 +1,157 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 using System;
+using UnityEngine.Serialization;
+
+#if UNITY_EDITOR
+using UnityEngine.SceneManagement;
+#endif
 
 namespace com.zibra.liquid.Manipulators
 {
     [AddComponentMenu("Zibra/Zibra Liquid Emitter")]
     public class ZibraLiquidEmitter : Manipulator
     {
+#if ZIBRA_LIQUID_PAID_VERSION
+        [NonSerialized]
+        public long createdParticlesTotal = 0;
+        [NonSerialized]
+        public int createdParticlesPerFrame = 0;
+#endif
+
+        public enum ClampBehaviorType
+        {
+            DontClamp,
+            Clamp
+        }
+
         [Tooltip("Emitted particles per second")]
         [Min(0.0f)]
         public float ParticlesPerSec = 6000.0f;
 
-        [Tooltip("The velocity of the created fluid")]
-        [Range(0.001f, 20.0f)]
-        public float VelocityMagnitude = 0.001f;
+        [NonSerialized]
+        [Obsolete("VelocityMagnitude is deprecated. Use InitialVelocity instead.", true)]
+        public float VelocityMagnitude;
+
+        [SerializeField]
+        [FormerlySerializedAs("VelocityMagnitude")]
+        private float VelocityMagnitudeOld;
+
+        [NonSerialized]
+        [Obsolete("CustomEmitterTransform is deprecated. Modify emitter's transform directly instead.", true)]
+        public Transform CustomEmitterTransform;
+
+        [SerializeField]
+        [FormerlySerializedAs("CustomEmitterTransform")]
+        private Transform CustomEmitterTransformOld;
+
+        [Tooltip("Initial velocity of newly created particles")]
+        // Rotated with object
+        // Used velocity will be equal to GetRotatedInitialVelocity
+        public Vector3 InitialVelocity = new Vector3(0, 0, 0);
+
+        [Tooltip("Controls what whether effective position of emitter will clamp to container bounds.")]
+        public ClampBehaviorType PositionClampBehavior = ClampBehaviorType.Clamp;
 
         [HideInInspector]
-        public Vector3 Velocity = new Vector3(0.001f, 0, 0);
-        private void UpdateVelocity()
+        [SerializeField]
+        private int ObjectVersion = 1;
+
+#if UNITY_EDITOR
+        void OnSceneOpened(Scene scene, UnityEditor.SceneManagement.OpenSceneMode mode)
         {
-            Velocity = transform.rotation * new Vector3(VelocityMagnitude, 0, 0);
+            Debug.Log("Zibra Liquid Emitter format was updated. Please resave scene.");
+            UnityEditor.EditorUtility.SetDirty(gameObject);
+        }
+#endif
+
+        [ExecuteInEditMode]
+        public void Awake()
+        {
+            // If Emitter is in old format we need to parse old parameters and come up with equivalent new ones
+            if (ObjectVersion == 1)
+            {
+                InitialVelocity = transform.rotation * new Vector3(VelocityMagnitudeOld, 0, 0);
+                VelocityMagnitudeOld = 0;
+                transform.rotation = Quaternion.identity;
+                if (CustomEmitterTransformOld)
+                {
+                    transform.position = CustomEmitterTransformOld.position;
+                    transform.rotation = CustomEmitterTransformOld.rotation;
+                    CustomEmitterTransformOld = null;
+                }
+
+                ObjectVersion = 2;
+#if UNITY_EDITOR
+                // Can't mark object dirty in Awake, since scene is not fully loaded yet
+                UnityEditor.SceneManagement.EditorSceneManager.sceneOpened += OnSceneOpened;
+#endif
+            }
         }
 
-        void GismosDrawArrow(Vector3 origin, Vector3 vector, Color color, float arrowHeadLength = 0.25f,
-                             float arrowHeadAngle = 20.0f)
-        {
-            Gizmos.color = color;
-            Gizmos.DrawRay(origin, vector);
-            arrowHeadLength *= Vector3.Magnitude(vector);
-
-            Vector3 right =
-                Quaternion.LookRotation(vector) * Quaternion.Euler(0, 180 + arrowHeadAngle, 0) * new Vector3(0, 0, 1);
-            Vector3 left =
-                Quaternion.LookRotation(vector) * Quaternion.Euler(0, 180 - arrowHeadAngle, 0) * new Vector3(0, 0, 1);
-
-            Gizmos.DrawRay(origin + vector, right * arrowHeadLength);
-            Gizmos.DrawRay(origin + vector, left * arrowHeadLength);
-        }
-
+#if UNITY_EDITOR
         void OnDrawGizmosSelected()
         {
-            UpdateVelocity();
-            float scale = 1.0f;
-            GismosDrawArrow(transform.position, scale * Velocity, Color.blue, 0.5f);
+            if (InitialVelocity.sqrMagnitude > Vector3.kEpsilon)
+            {
+                Utilities.GizmosHelper.DrawArrow(transform.position, GetRotatedInitialVelocity(), Color.blue, 0.5f);
+            }
+
             Gizmos.color = Color.blue;
-            Gizmos.DrawWireCube(transform.position, transform.lossyScale);
+            Gizmos.matrix = GetTransform();
+            Gizmos.DrawWireCube(new Vector3(0, 0, 0), new Vector3(1, 1, 1));
         }
 
         void OnDrawGizmos()
         {
             OnDrawGizmosSelected();
         }
-
+#endif
         ZibraLiquidEmitter()
         {
-            // DataAmount = 4;
-            TYPE = ManipulatorType.Emitter;
+            ManipType = ManipulatorType.Emitter;
+        }
+
+        public Vector3 GetRotatedInitialVelocity()
+        {
+            return transform.rotation * InitialVelocity;
         }
 
         private void Update()
         {
-            UpdateVelocity();
-            AdditionalData.x = Mathf.Floor(ParticlesPerSec * Time.smoothDeltaTime);
-            AdditionalData.y = Velocity.x;
-            AdditionalData.z = Velocity.y;
-            AdditionalData.w = Velocity.z;
+            Vector3 rotatedInitialVelocity = GetRotatedInitialVelocity();
+            AdditionalData.y = rotatedInitialVelocity.x;
+            AdditionalData.z = rotatedInitialVelocity.y;
+            AdditionalData.w = rotatedInitialVelocity.z;
         }
+
+        override public Matrix4x4 GetTransform()
+        {
+            return transform.localToWorldMatrix;
+        }
+
+        override public Quaternion GetRotation()
+        {
+            return transform.rotation;
+        }
+
+        override public Vector3 GetPosition()
+        {
+            return transform.position;
+        }
+        override public Vector3 GetScale()
+        {
+            return transform.lossyScale;
+        }
+
+        // clang-format doesn't parse code with new keyword properly
+        // clang-format off
+
+#if UNITY_EDITOR
+        public new void OnDestroy()
+        {
+            base.OnDestroy();
+            UnityEditor.SceneManagement.EditorSceneManager.sceneOpened -= OnSceneOpened;
+        }
+#endif
     }
 }

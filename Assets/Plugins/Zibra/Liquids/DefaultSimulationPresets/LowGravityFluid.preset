@@ -46,11 +46,11 @@ Preset:
     value: 3
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: ParticlesPerCell
+    propertyPath: ParticleDensity
     value: 3
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: VelocityLimit
+    propertyPath: MaximumVelocity
     value: 3
     objectReference: {fileID: 0}
   - target: {fileID: 0}

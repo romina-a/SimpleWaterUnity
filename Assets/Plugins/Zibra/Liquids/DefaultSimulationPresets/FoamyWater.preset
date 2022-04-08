@@ -26,60 +26,28 @@ Preset:
     value: 
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: RefractionColor.r
+    propertyPath: FluidMaterial
+    value: 
+    objectReference: {fileID: 2100000, guid: 212140388bc74764ba19ea2bbe4ce94c, type: 2}
+  - target: {fileID: 0}
+    propertyPath: UpscaleMaterial
+    value: 
+    objectReference: {fileID: 2100000, guid: 374557399a8cb1b499aee6a0cc226496, type: 2}
+  - target: {fileID: 0}
+    propertyPath: Color.r
     value: 0.3411765
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: RefractionColor.g
+    propertyPath: Color.g
     value: 0.7238583
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: RefractionColor.b
+    propertyPath: Color.b
     value: 0.92156863
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: RefractionColor.a
+    propertyPath: Color.a
     value: 1
-    objectReference: {fileID: 0}
-  - target: {fileID: 0}
-    propertyPath: Smoothness
-    value: 0.96
-    objectReference: {fileID: 0}
-  - target: {fileID: 0}
-    propertyPath: Metal
-    value: 0.248
-    objectReference: {fileID: 0}
-  - target: {fileID: 0}
-    propertyPath: Opacity
-    value: 3
-    objectReference: {fileID: 0}
-  - target: {fileID: 0}
-    propertyPath: Shadowing
-    value: 0.071
-    objectReference: {fileID: 0}
-  - target: {fileID: 0}
-    propertyPath: RefractionDistort
-    value: 0.15
-    objectReference: {fileID: 0}
-  - target: {fileID: 0}
-    propertyPath: ParticleScale
-    value: 2.2
-    objectReference: {fileID: 0}
-  - target: {fileID: 0}
-    propertyPath: Foam
-    value: 1
-    objectReference: {fileID: 0}
-  - target: {fileID: 0}
-    propertyPath: FoamDensity
-    value: 1.1
-    objectReference: {fileID: 0}
-  - target: {fileID: 0}
-    propertyPath: BlurRadius
-    value: 0.011
-    objectReference: {fileID: 0}
-  - target: {fileID: 0}
-    propertyPath: BilateralWeight
-    value: 2.5
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: ReflectionColor.r
@@ -95,5 +63,53 @@ Preset:
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: ReflectionColor.a
+    value: 1
+    objectReference: {fileID: 0}
+  - target: {fileID: 0}
+    propertyPath: SmoothnessOld
+    value: 0.96
+    objectReference: {fileID: 0}
+  - target: {fileID: 0}
+    propertyPath: Roughness
+    value: 0.04
+    objectReference: {fileID: 0}
+  - target: {fileID: 0}
+    propertyPath: Metalness
+    value: 0.248
+    objectReference: {fileID: 0}
+  - target: {fileID: 0}
+    propertyPath: Opacity
+    value: 3
+    objectReference: {fileID: 0}
+  - target: {fileID: 0}
+    propertyPath: Shadowing
+    value: 0.071
+    objectReference: {fileID: 0}
+  - target: {fileID: 0}
+    propertyPath: RefractionDistortion
+    value: 0.15
+    objectReference: {fileID: 0}
+  - target: {fileID: 0}
+    propertyPath: ParticleScale
+    value: 2.2
+    objectReference: {fileID: 0}
+  - target: {fileID: 0}
+    propertyPath: FoamIntensity
+    value: 1
+    objectReference: {fileID: 0}
+  - target: {fileID: 0}
+    propertyPath: FoamAmount
+    value: 1.1
+    objectReference: {fileID: 0}
+  - target: {fileID: 0}
+    propertyPath: BlurRadius
+    value: 0.011
+    objectReference: {fileID: 0}
+  - target: {fileID: 0}
+    propertyPath: BilateralWeight
+    value: 2.5
+    objectReference: {fileID: 0}
+  - target: {fileID: 0}
+    propertyPath: ObjectVersion
     value: 1
     objectReference: {fileID: 0}

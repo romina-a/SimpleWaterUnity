@@ -109,7 +109,7 @@ namespace com.zibra.liquid.Samples
                 if (Input.GetKey(KeyCode.Space))
                 {
                     emitter.ParticlesPerSec = 8000;
-                    emitter.Velocity = Quaternion.Euler(camPhi, camTheta, 0) * (new Vector3(0, 0, 1)) * 1.8f;
+                    emitter.InitialVelocity = Quaternion.Euler(camPhi, camTheta, 0) * (new Vector3(0, 0, 1)) * 1.8f;
                 }
                 else
                 {

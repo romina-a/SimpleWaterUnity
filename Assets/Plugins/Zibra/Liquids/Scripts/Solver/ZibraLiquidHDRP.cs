@@ -23,19 +23,32 @@ namespace com.zibra.liquid
                                         useDynamicScale: true, name: "Depth buffer");
             }
 
+#if UNITY_PIPELINE_HDRP_9_0_OR_HIGHER
+            protected override void Execute(CustomPassContext ctx)
+#else
             protected override void Execute(ScriptableRenderContext renderContext, CommandBuffer cmd, HDCamera hdCamera,
                                             CullingResults cullingResult)
+#endif
             {
                 if (liquid && liquid.initialized && liquid.simulationInternalFrame > 1)
                 {
+
+                    RTHandle cameraColor, cameraDepth;
+#if UNITY_PIPELINE_HDRP_9_0_OR_HIGHER
+                    cameraColor = ctx.cameraColorBuffer;
+                    cameraDepth = ctx.cameraDepthBuffer;
+
+                    HDCamera hdCamera = ctx.hdCamera;
+                    CommandBuffer cmd = ctx.cmd;
+#else
+                    GetCameraBuffers(out cameraColor, out cameraDepth);
+#endif
+
                     if ((hdCamera.camera.cullingMask & (1 << liquid.gameObject.layer)) ==
                         0) // fluid gameobject layer is not in the culling mask of the camera
                         return;
 
                     liquid.RenderCallBack(hdCamera.camera);
-
-                    RTHandle cameraColor, cameraDepth;
-                    GetCameraBuffers(out cameraColor, out cameraDepth);
 
                     var depth = Shader.PropertyToID("_CameraDepthTexture");
                     cmd.GetTemporaryRT(depth, hdCamera.camera.pixelWidth, hdCamera.camera.pixelHeight, 32,
@@ -43,17 +56,19 @@ namespace com.zibra.liquid
 
                     // copy screen to background
                     var scale = RTHandles.rtHandleProperties.rtHandleScale;
-                    cmd.Blit(cameraColor, liquid.cameraResources[hdCamera.camera].background,
-                             new Vector2(scale.x, scale.y), Vector2.zero, 0, 0);
+                    if (liquid.IsBackgroundCopyNeeded(hdCamera.camera))
+                    {
+                        cmd.Blit(cameraColor, liquid.cameraResources[hdCamera.camera].background,
+                                 new Vector2(scale.x, scale.y), Vector2.zero, 0, 0);
+                    }
                     // blit depth to temp RT
                     HDUtils.BlitCameraTexture(cmd, cameraDepth, Depth);
                     cmd.Blit(Depth, depth, new Vector2(scale.x, scale.y), Vector2.zero, 1, 0);
 
-                    liquid.RenderParticelsNative(cmd);
-                    CoreUtils.SetRenderTarget(cmd, cameraColor, cameraDepth, ClearFlag.None);
+                    liquid.RenderParticlesNative(cmd);
                     // bind temp depth RT
                     cmd.SetGlobalTexture("_CameraDepthTexture", depth);
-                    liquid.RenderFluid(cmd, hdCamera.camera);
+                    liquid.RenderFluid(cmd, hdCamera.camera, cameraColor, cameraDepth, hdCamera.camera.pixelRect);
                     cmd.ReleaseTemporaryRT(depth);
                 }
             }

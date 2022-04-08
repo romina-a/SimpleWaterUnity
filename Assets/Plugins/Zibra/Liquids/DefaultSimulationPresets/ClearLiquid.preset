@@ -26,27 +26,35 @@ Preset:
     value: 
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: RefractionColor.r
+    propertyPath: FluidMaterial
+    value: 
+    objectReference: {fileID: 2100000, guid: 212140388bc74764ba19ea2bbe4ce94c, type: 2}
+  - target: {fileID: 0}
+    propertyPath: UpscaleMaterial
+    value: 
+    objectReference: {fileID: 2100000, guid: 374557399a8cb1b499aee6a0cc226496, type: 2}
+  - target: {fileID: 0}
+    propertyPath: Color.r
     value: 0.31372553
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: RefractionColor.g
+    propertyPath: Color.g
     value: 0.7803755
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: RefractionColor.b
+    propertyPath: Color.b
     value: 0.9019608
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: RefractionColor.a
+    propertyPath: Color.a
     value: 1
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: Smoothness
-    value: 0.946
+    propertyPath: Roughness
+    value: 0.054
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: Metal
+    propertyPath: Metalness
     value: 0.24
     objectReference: {fileID: 0}
   - target: {fileID: 0}
@@ -58,7 +66,7 @@ Preset:
     value: 0.098
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: RefractionDistort
+    propertyPath: RefractionDistortion
     value: 0.161
     objectReference: {fileID: 0}
   - target: {fileID: 0}
@@ -66,11 +74,11 @@ Preset:
     value: 2.37
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: Foam
+    propertyPath: FoamIntensity
     value: 0.07
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: FoamDensity
+    propertyPath: FoamAmount
     value: 1
     objectReference: {fileID: 0}
   - target: {fileID: 0}
@@ -97,3 +105,4 @@ Preset:
     propertyPath: ReflectionColor.a
     value: 1
     objectReference: {fileID: 0}
+  m_ExcludedProperties: []

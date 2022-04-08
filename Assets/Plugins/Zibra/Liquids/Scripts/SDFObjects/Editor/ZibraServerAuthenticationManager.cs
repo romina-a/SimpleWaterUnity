@@ -1,4 +1,4 @@
-﻿#if ZIBRA_LIQUID_PAID_VERSION
+﻿#if ZIBRA_LIQUID_PAID_VERSION && UNITY_EDITOR
 
 using System;
 using System.Reflection;
@@ -12,7 +12,7 @@ namespace com.zibra.liquid.Editor.SDFObjects
     [ExecuteInEditMode]
     public class ZibraServerAuthenticationManager
     {
-        private const string BASE_URL = "http://gen.zibra.ai:5000/";
+        private const string BASE_URL = "http://generation.zibra.ai/";
         private string UserHardwareID = "";
         private string UserID = "";
         UnityWebRequestAsyncOperation request;
@@ -25,7 +25,12 @@ namespace com.zibra.liquid.Editor.SDFObjects
         public bool IsInitialized = false;
         public bool bNeedRefresh = false;
 
-#if UNITY_EDITOR
+        // Unity populate user info needed for server communication with delay
+        // So we don't warn on startup
+        // We only start showing warnings when user needs to authenticate
+        // We only hide user info related warnings based on this variable, not network/server errors
+        private bool EnableWarnings = false;
+
         private class LicenseKeyResponse
         {
             public string api_key;
@@ -103,9 +108,12 @@ namespace com.zibra.liquid.Editor.SDFObjects
             IsKeyRequestInProgress = true;
         }
 
-        public void Initialize()
+        // Pass true when Initialize is called as a result of user interaction
+        public void Initialize(bool enableWarnings = false)
         {
-            if (IsKeyRequestInProgress)
+            EnableWarnings = EnableWarnings || enableWarnings;
+
+            if (IsKeyRequestInProgress || IsLicenseKeyValid)
                 return;
 
             CollectUserInfo();
@@ -129,7 +137,11 @@ namespace com.zibra.liquid.Editor.SDFObjects
                 IsInitialized = true;
                 IsKeyRequestInProgress = false;
                 var result = request.webRequest.downloadHandler.text;
+#if UNITY_2020_2_OR_NEWER
+                if (result != null && request.webRequest.result == UnityWebRequest.Result.Success)
+#else
                 if (result != null && !request.webRequest.isHttpError && !request.webRequest.isNetworkError)
+#endif
                 {
                     PluginLicenseKey = JsonUtility.FromJson<LicenseKeyResponse>(result).api_key;
                     if (PluginLicenseKey != "")
@@ -139,14 +151,18 @@ namespace com.zibra.liquid.Editor.SDFObjects
                         // populate server request URL if everything is fine
                         GenerationURL = CreateGenerationRequestURL();
                     }
-                    else if (request.webRequest.isHttpError || request.webRequest.isNetworkError)
-                    {
-                        Debug.Log(request.webRequest.error);
-                    }
                     RefreshAboutTab();
                     // empty response meaning User is not registered
                     ErrorText = "To use this feature please register Zibra Liquid and get authentication key." +
                                 Environment.NewLine + "See Zibra AI Liquids - Info tab in main menu.";
+                }
+#if UNITY_2020_2_OR_NEWER
+                else if (request.webRequest.result != UnityWebRequest.Result.Success)
+#else
+                else if (request.webRequest.isHttpError || request.webRequest.isNetworkError)
+#endif
+                {
+                    Debug.Log(request.webRequest.error);
                 }
             }
             return;
@@ -174,8 +190,11 @@ namespace com.zibra.liquid.Editor.SDFObjects
             // Cache type of UnityConnect.
             if (uc == null)
             {
-                ErrorText = "Could not create UnityEditor.Connect.UnityConnect. Try later.";
-                Debug.Log(ErrorText);
+                if (EnableWarnings)
+                {
+                    ErrorText = "Could not create UnityEditor.Connect.UnityConnect. Try later.";
+                    Debug.Log(ErrorText);
+                }
                 IsInitialized = false;
                 return;
             }
@@ -186,8 +205,11 @@ namespace com.zibra.liquid.Editor.SDFObjects
             // Retrieve user id from user info.
             if (userInfo == null)
             {
-                ErrorText = "Could not retrieve User Info from UnityEditor.Connect.UnityConnect. Try later.";
-                Debug.Log(ErrorText);
+                if (EnableWarnings)
+                {
+                    ErrorText = "Could not retrieve User Info from UnityEditor.Connect.UnityConnect. Try later.";
+                    Debug.Log(ErrorText);
+                }
                 IsInitialized = false;
                 return;
             }
@@ -196,8 +218,11 @@ namespace com.zibra.liquid.Editor.SDFObjects
             var isValid = userInfoType.GetProperty("valid");
             if (isValid == null || isValid.GetValue(userInfo, null).Equals(false))
             {
-                ErrorText = "User authentication error. Try later.";
-                Debug.Log(ErrorText);
+                if (EnableWarnings)
+                {
+                    ErrorText = "User authentication error. Try later.";
+                    Debug.Log(ErrorText);
+                }
                 IsInitialized = false;
                 return;
             }
@@ -205,9 +230,12 @@ namespace com.zibra.liquid.Editor.SDFObjects
             UserID = userInfoType.GetProperty("userId")?.GetValue(userInfo, null) as string;
             if (UserID == "")
             {
-                ErrorText =
-                    "Can't get Unity account information. Please ensure you are logged in to Unity Hub, and that Unity Editor was launched with Unity Hub.";
-                Debug.Log(ErrorText);
+                if (EnableWarnings)
+                {
+                    ErrorText =
+                        "Can't get Unity account information. Please ensure you are logged in to Unity Hub, and that Unity Editor was launched with Unity Hub.";
+                    Debug.Log(ErrorText);
+                }
                 IsInitialized = false;
                 return;
             }
@@ -237,7 +265,7 @@ namespace com.zibra.liquid.Editor.SDFObjects
 
             return GenerationURL;
         }
-#endif
     }
 }
+
 #endif

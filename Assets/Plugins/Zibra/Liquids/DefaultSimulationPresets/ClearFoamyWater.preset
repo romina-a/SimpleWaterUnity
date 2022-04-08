@@ -9,7 +9,8 @@ Preset:
   m_Name: ClearFoamyWater
   m_TargetType:
     m_NativeTypeID: 114
-    m_ManagedTypePPtr: {fileID: 11500000, guid: b9d9f4948168ee245b0a8e48922540ba, type: 3}
+    m_ManagedTypePPtr: {fileID: 11500000, guid: b9d9f4948168ee245b0a8e48922540ba,
+      type: 3}
     m_ManagedTypeFallback: 
   m_Properties:
   - target: {fileID: 0}
@@ -25,27 +26,35 @@ Preset:
     value: 
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: RefractionColor.r
+    propertyPath: FluidMaterial
+    value: 
+    objectReference: {fileID: 2100000, guid: 212140388bc74764ba19ea2bbe4ce94c, type: 2}
+  - target: {fileID: 0}
+    propertyPath: UpscaleMaterial
+    value: 
+    objectReference: {fileID: 2100000, guid: 374557399a8cb1b499aee6a0cc226496, type: 2}
+  - target: {fileID: 0}
+    propertyPath: Color.r
     value: 1
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: RefractionColor.g
+    propertyPath: Color.g
     value: 1
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: RefractionColor.b
+    propertyPath: Color.b
     value: 1
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: RefractionColor.a
+    propertyPath: Color.a
     value: 1
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: Smoothness
-    value: 1
+    propertyPath: Roughness
+    value: 0
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: Metal
+    propertyPath: Metalness
     value: 0.03
     objectReference: {fileID: 0}
   - target: {fileID: 0}
@@ -57,7 +66,7 @@ Preset:
     value: 0
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: RefractionDistort
+    propertyPath: RefractionDistortion
     value: 0.09
     objectReference: {fileID: 0}
   - target: {fileID: 0}
@@ -65,11 +74,11 @@ Preset:
     value: 2.8
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: Foam
+    propertyPath: FoamIntensity
     value: 1.39
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: FoamDensity
+    propertyPath: FoamAmount
     value: 0.56
     objectReference: {fileID: 0}
   - target: {fileID: 0}

@@ -93,7 +93,8 @@ namespace com.zibra.liquid.Foundation.UIElements
             Add(m_TextField);
 
             // This is only possible when data is restored.
-            m_TextField.RegisterValueChangedCallback(e => { SetValue(e.newValue); });
+            m_TextField.RegisterValueChangedCallback(e =>
+                                                     { SetValue(e.newValue); });
         }
 
         /// <summary>

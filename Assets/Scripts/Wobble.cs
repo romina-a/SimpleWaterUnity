@@ -15,7 +15,6 @@ public class Wobble : MonoBehaviour
     public float Recovery = 1f;
 
     public Vector4 gravity = new Vector4(0, -1, 0, 0);
-    private Vector4 waterNormal;
 
     [Range(-1, 1)]
     public float baseWobbleAmountX = 0;
@@ -37,7 +36,6 @@ public class Wobble : MonoBehaviour
     void Start()
     {
         rend = GetComponent<Renderer>();
-        waterNormal = -gravity;
     }
     private void Update()
     {
@@ -70,8 +68,8 @@ public class Wobble : MonoBehaviour
 
 
         // add clamped velocity to wobble
-        wobbleAmountToAddX += Mathf.Clamp((velocity.x + (angularVelocity.z * 0.2f)) /* * MaxWobble */, -MaxWobble, MaxWobble);
-        wobbleAmountToAddZ += Mathf.Clamp((velocity.z + (angularVelocity.x * 0.2f)) /* * MaxWobble */, -MaxWobble, MaxWobble);
+        wobbleAmountToAddX += Mathf.Clamp((-velocity.x + (angularVelocity.z * 0.2f)) /* * MaxWobble */, -MaxWobble, MaxWobble);
+        wobbleAmountToAddZ += Mathf.Clamp((-velocity.z + (angularVelocity.x * 0.2f)) /* * MaxWobble */, -MaxWobble, MaxWobble);
 
         // keep last position
         lastPos = transform.position;

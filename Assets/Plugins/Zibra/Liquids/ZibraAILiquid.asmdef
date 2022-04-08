@@ -1,5 +1,6 @@
 {
     "name": "ZibraAILiquid",
+    "rootNamespace": "",
     "references": [
         "com.zibra.liquid",
         "com.zibra.liquid.Editor",
@@ -10,6 +11,7 @@
     "includePlatforms": [
         "Editor",
         "macOSStandalone",
+        "WSA",
         "WindowsStandalone32",
         "WindowsStandalone64"
     ],
@@ -26,14 +28,24 @@
             "define": "UNITY_PIPELINE_HDRP"
         },
         {
-            "name": "com.unity.scriptablebuildpipeline",
-            "expression": "",
-            "define": ""
-        },
-        {
             "name": "com.unity.render-pipelines.universal",
             "expression": "",
             "define": "UNITY_PIPELINE_URP"
+        },
+        {
+            "name": "com.unity.render-pipelines.universal",
+            "expression": "9",
+            "define": "UNITY_PIPELINE_URP_9_0_OR_HIGHER"
+        },
+        {
+            "name": "com.unity.render-pipelines.universal",
+            "expression": "10",
+            "define": "UNITY_PIPELINE_URP_10_0_OR_HIGHER"
+        },
+        {
+            "name": "com.unity.render-pipelines.high-definition",
+            "expression": "9",
+            "define": "UNITY_PIPELINE_HDRP_9_0_OR_HIGHER"
         }
     ],
     "noEngineReferences": false

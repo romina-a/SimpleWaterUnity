@@ -4,7 +4,7 @@ Shader "Romina/Wavy"
     {
 		_Color ("Color", Color) = (1,1,1,1)
         _TopColor ("Top Color", Color) = (1,1,1,1)
-        _Wavyness ("Fill Amount", float) = 1 
+		_T ("Time", float) = 0
 		_WaterNormal ("Water Normal", vector) = (0,1,0,0)
 
     }
@@ -32,10 +32,10 @@ Shader "Romina/Wavy"
 
         Pass
         {
-		 Zwrite on // ? sets whether the depth buffer contents are updated during rendering normally ZWrite is enabled for opaque objects and disabled for semi-transparent ones
+		 Zwrite off // ? sets whether the depth buffer contents are updated during rendering normally ZWrite is enabled for opaque objects and disabled for semi-transparent ones
 		 Ztest LEqual //ztest does not run on the current object, so if culling is off and ztest is LEqual, the back facing tirangles are renderd on top(?)
 		 Cull off // we want the front and back faces, Culling is an optimization that does not render polygons facing away from the viewer. All polygons have a front and a back side.
-		 //AlphaToMask on // transparency on top (?)
+		 //AlphaToMask off // transparency on top (?)
 		 Blend SrcAlpha OneMinusSrcAlpha
 
          CGPROGRAM
@@ -57,7 +57,7 @@ Shader "Romina/Wavy"
 			float fillEdge: TEXCOORD2;
 		};
  
-         float _Wavyness;
+         float _T;
          float4 _TopColor, _Color, _WaterNormal;
 		
 
@@ -69,21 +69,20 @@ Shader "Romina/Wavy"
 			o.viewDir = normalize(ObjSpaceViewDir(v.vertex));
 			o.normal = v.normal;
 
-			float l = _FillAmount; // TODO how to determine _FillAmount limits?
 			float4 ObjectCenter = float4(0,0,0,1); // object coordinates
 			ObjectCenter = mul(unity_ObjectToWorld, ObjectCenter); // world coordinates
 			float3 wn = normalize(_WaterNormal.xyz); // world coordinates
-			float3 pointOnWaterPlane = ObjectCenter.xyz + l * wn; // world coordinates // TODO --> where should the line be in each direction?
+			float3 pointOnWaterPlane = ObjectCenter.xyz; // world coordinates // TODO --> where should the line be in each direction?
 			float4 vertex_world = mul(unity_ObjectToWorld, v.vertex); // world coordinates
 			float pic = dot((vertex_world.xyz-pointOnWaterPlane.xyz), wn); // if vertex is above the plane pic is positive
-			o.fillEdge = pic + _Wavyness*sin(v.vertex.x);
+			o.fillEdge = pic;
 
             return o;
          }
 
-         fixed4 frag (v2f i, fixed facing : VFACE) : SV_Target
-         {
-
+		 fixed4 frag(v2f i, fixed facing : VFACE) : SV_Target
+		 {
+		  i.fillEdge = i.fillEdge+ 0.05 * sin(0.1*i.vertex.x/3.14+_T);
 		  float result = step(i.fillEdge, 0);
 		  return i.fillEdge < 0 ?  result*_Color: result* _TopColor;
 

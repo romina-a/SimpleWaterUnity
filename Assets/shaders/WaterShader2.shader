@@ -6,9 +6,6 @@ Shader "Romina/WaterShader2"
         _TopColor ("Top Color", Color) = (1,1,1,1)
         _FillAmount ("Fill Amount", Range(0,1)) = 0.5
 		_WaterNormal ("Water Normal", vector) = (0,1,0,0)
-		[HideInInspector] _WaterNormalRotationX ("Water Normal Rotation X", Range(0,360)) = 90
-		[HideInInspector] _WaterNormalRotationY ("Water Normal Rotation Y", Range(0,360)) = 0
-		[HideInInspector] _WaterNormalRotationZ ("Water Normal Rotation Z", Range(0,360)) = 90
     }
  
     SubShader
@@ -59,7 +56,7 @@ Shader "Romina/WaterShader2"
 			float fillEdge: TEXCOORD1;
 		};
  
-         float _FillAmount, _WaterNormalRotationX, _WaterNormalRotationY, _WaterNormalRotationZ;
+		 float _FillAmount;
          float4 _TopColor, _Color, _WaterNormal;
 		
 

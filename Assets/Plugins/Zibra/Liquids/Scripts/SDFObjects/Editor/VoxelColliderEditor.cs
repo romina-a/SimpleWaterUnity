@@ -7,355 +7,481 @@ using com.zibra.liquid.Utilities;
 using UnityEngine;
 using UnityEditor;
 using UnityEngine.Networking;
+using System.Collections.Generic;
 
 namespace com.zibra.liquid.Editor.SDFObjects
 {
-    [CustomEditor(typeof(VoxelCollider), true)]
+    [CustomEditor(typeof(VoxelCollider))]
+    [CanEditMultipleObjects]
     public class VoxelColliderEditor : UnityEditor.Editor
     {
         // Limits for representation generation web requests
         private const uint REQUEST_TRIANGLE_COUNT_LIMIT = 100000;
         private const uint REQUEST_SIZE_LIMIT = 3 << 20; // 3mb
 
-        [HideInInspector]
-        [SerializeField]
-        private Vector3[] VertexCachedBuffer;
-        private Bounds MeshBounds;
-        private VoxelCollider VoxelCollider;
-        private MeshFilter MeshFilter;
-        private SerializedProperty ForceInteraction;
-        private UnityWebRequest CurrentRequest;
+        static VoxelColliderEditor EditorInstance;
 
-        public event Action<VoxelRepresentation> OnGenerated;
-        public bool IsGenerating => CurrentRequest != null;
-
-        protected void Awake()
+        class VoxelColliderGenerator
         {
-            ZibraServerAuthenticationManager.GetInstance().Initialize();
-
-            if (!EditorApplication.isPlaying && VoxelCollider != null)
+            public VoxelColliderGenerator(VoxelCollider voxelCollider)
             {
-                var mesh = VoxelCollider.GetMesh();
+                this.VoxelColliderInstance = voxelCollider;
+            }
 
-                if (mesh != null)
+            public VoxelCollider GetCollider()
+            {
+                return VoxelColliderInstance;
+            }
+
+            private Vector3[] VertexCachedBuffer;
+            private Bounds MeshBounds;
+            private VoxelCollider VoxelColliderInstance;
+            private UnityWebRequest CurrentRequest;
+            public void CreateMeshBBCube()
+            {
+                Mesh mesh = VoxelColliderInstance.GetComponent<MeshFilter>().sharedMesh;
+
+                if (mesh == null)
+                {
+                    return;
+                }
+
+                MeshBounds = mesh.bounds;
+
+                VoxelColliderInstance.BoundingBoxMax = MeshBounds.max;
+                VoxelColliderInstance.BoundingBoxMin = MeshBounds.min;
+
+                Vector3 lengths = MeshBounds.size;
+                float max_length = Math.Max(Math.Max(lengths.x, lengths.y), lengths.z);
+                // for every direction (X,Y,Z)
+                if (max_length != lengths.x)
+                {
+                    float delta = max_length -
+                                  lengths.x; // compute difference between largest length and current (X,Y or Z) length
+                    VoxelColliderInstance.BoundingBoxMin.x =
+                        MeshBounds.min.x - (delta / 2.0f); // pad with half the difference before current min
+                    VoxelColliderInstance.BoundingBoxMax.x =
+                        MeshBounds.max.x + (delta / 2.0f); // pad with half the difference behind current max
+                }
+
+                if (max_length != lengths.y)
+                {
+                    float delta = max_length -
+                                  lengths.y; // compute difference between largest length and current (X,Y or Z) length
+                    VoxelColliderInstance.BoundingBoxMin.y =
+                        MeshBounds.min.y - (delta / 2.0f); // pad with half the difference before current min
+                    VoxelColliderInstance.BoundingBoxMax.y =
+                        MeshBounds.max.y + (delta / 2.0f); // pad with half the difference behind current max
+                }
+
+                if (max_length != lengths.z)
+                {
+                    float delta = max_length -
+                                  lengths.z; // compute difference between largest length and current (X,Y or Z) length
+                    VoxelColliderInstance.BoundingBoxMin.z =
+                        MeshBounds.min.z - (delta / 2.0f); // pad with half the difference before current min
+                    VoxelColliderInstance.BoundingBoxMax.z =
+                        MeshBounds.max.z + (delta / 2.0f); // pad with half the difference behind current max
+                }
+
+                // Next snippet adresses the problem reported here: https://github.com/Forceflow/cuda_voxelizer/issues/7
+                // Suspected cause: If a triangle is axis-aligned and lies perfectly on a voxel edge, it sometimes gets
+                // counted / not counted Probably due to a numerical instability (division by zero?) Ugly fix: we pad
+                // the bounding box on all sides by 1/10001th of its total length, bringing all triangles ever so
+                // slightly off-grid
+                Vector3 epsilon = VoxelColliderInstance.BoundingBoxMax - VoxelColliderInstance.BoundingBoxMin;
+                epsilon /= 10001.0f;
+                VoxelColliderInstance.BoundingBoxMin -= epsilon;
+                VoxelColliderInstance.BoundingBoxMax += epsilon;
+            }
+
+            public void Start()
+            {
+                var mesh = VoxelColliderInstance.GetMesh();
+
+                if (mesh == null)
+                {
+                    return;
+                }
+
+                if (mesh.triangles.Length / 3 > REQUEST_TRIANGLE_COUNT_LIMIT)
+                {
+                    string errorMessage =
+                        $"Mesh is too large. Can't generate representation. Triangle count should not exceed {REQUEST_TRIANGLE_COUNT_LIMIT} triangles, but current mesh have {mesh.triangles.Length / 3} triangles";
+                    EditorUtility.DisplayDialog("ZibraLiquid Error.", errorMessage, "OK");
+                    Debug.LogError(errorMessage);
+                    return;
+                }
+
+                if (!EditorApplication.isPlaying)
                 {
                     VertexCachedBuffer = new Vector3[mesh.vertices.Length];
                     Array.Copy(mesh.vertices, VertexCachedBuffer, mesh.vertices.Length);
-                    EditorUtility.SetDirty(this);
                 }
-            }
-        }
 
-        protected void OnEnable()
-        {
-            VoxelCollider = serializedObject.targetObject as VoxelCollider;
-            OnGenerated += FinishGeneration;
-            EditorApplication.update += CheckMeshComponent;
-            ForceInteraction = serializedObject.FindProperty("ForceInteraction");
-        }
-        public void CreateMeshBBCube()
-        {
-            Mesh mesh = VoxelCollider.GetComponent<MeshFilter>().sharedMesh;
+                var meshRepresentation = new MeshRepresentation { vertices = mesh.vertices.Vector3ToString(),
+                                                                  faces = mesh.triangles.IntToString() };
 
-            if (mesh == null)
-            {
-                return;
-            }
-
-            MeshBounds = mesh.bounds;
-
-            VoxelCollider.BoundingBoxMax = MeshBounds.max;
-            VoxelCollider.BoundingBoxMin = MeshBounds.min;
-
-            Vector3 lengths = MeshBounds.size;
-            float max_length = Math.Max(Math.Max(lengths.x, lengths.y), lengths.z);
-            // for every direction (X,Y,Z)
-            if (max_length != lengths.x)
-            {
-                float delta =
-                    max_length - lengths.x; // compute difference between largest length and current (X,Y or Z) length
-                VoxelCollider.BoundingBoxMin.x =
-                    MeshBounds.min.x - (delta / 2.0f); // pad with half the difference before current min
-                VoxelCollider.BoundingBoxMax.x =
-                    MeshBounds.max.x + (delta / 2.0f); // pad with half the difference behind current max
-            }
-
-            if (max_length != lengths.y)
-            {
-                float delta =
-                    max_length - lengths.y; // compute difference between largest length and current (X,Y or Z) length
-                VoxelCollider.BoundingBoxMin.y =
-                    MeshBounds.min.y - (delta / 2.0f); // pad with half the difference before current min
-                VoxelCollider.BoundingBoxMax.y =
-                    MeshBounds.max.y + (delta / 2.0f); // pad with half the difference behind current max
-            }
-
-            if (max_length != lengths.z)
-            {
-                float delta =
-                    max_length - lengths.z; // compute difference between largest length and current (X,Y or Z) length
-                VoxelCollider.BoundingBoxMin.z =
-                    MeshBounds.min.z - (delta / 2.0f); // pad with half the difference before current min
-                VoxelCollider.BoundingBoxMax.z =
-                    MeshBounds.max.z + (delta / 2.0f); // pad with half the difference behind current max
-            }
-
-            // Next snippet adresses the problem reported here: https://github.com/Forceflow/cuda_voxelizer/issues/7
-            // Suspected cause: If a triangle is axis-aligned and lies perfectly on a voxel edge, it sometimes gets
-            // counted / not counted Probably due to a numerical instability (division by zero?) Ugly fix: we pad the
-            // bounding box on all sides by 1/10001th of its total length, bringing all triangles ever so slightly
-            // off-grid
-            Vector3 epsilon = VoxelCollider.BoundingBoxMax - VoxelCollider.BoundingBoxMin;
-            epsilon /= 10001.0f;
-            VoxelCollider.BoundingBoxMin -= epsilon;
-            VoxelCollider.BoundingBoxMax += epsilon;
-        }
-
-        private void CheckMeshComponent()
-        {
-            if (VoxelCollider == null)
-                return;
-
-            Renderer renderer = VoxelCollider.GetComponent<Renderer>();
-            if (renderer == null)
-            {
-                EditorUtility.DisplayDialog(
-                    "No Renderer attached",
-                    "VoxelCollider requires MeshRenderer or SkinnedMeshRenderer " +
-                        "attached to the same object to operate correctly. Make sure one of them is present before adding this component.",
-                    "OK");
-                DestroyImmediate(VoxelCollider);
-
-                return;
-            }
-
-            if (renderer is MeshRenderer meshRenderer)
-            {
-                if (MeshFilter == null)
+                if (CurrentRequest != null)
                 {
-                    MeshFilter = meshRenderer.GetComponent<MeshFilter>();
+                    CurrentRequest.Dispose();
+                    CurrentRequest = null;
+                }
 
-                    if (MeshFilter == null)
+                var json = JsonUtility.ToJson(meshRepresentation);
+
+                if (json.Length > REQUEST_SIZE_LIMIT)
+                {
+                    string errorMessage =
+                        $"Mesh is too large. Can't generate representation. Please decrease vertex/triangle count. Web request should not exceed {REQUEST_SIZE_LIMIT / (1 << 20):N2}mb, but for current mesh {(float)json.Length / (1 << 20):N2}mb is needed.";
+                    EditorUtility.DisplayDialog("ZibraLiquid Error.", errorMessage, "OK");
+                    Debug.LogError(errorMessage);
+                    return;
+                }
+
+                if (ZibraServerAuthenticationManager.GetInstance().IsLicenseKeyValid)
+                {
+                    string requestURL = ZibraServerAuthenticationManager.GetInstance().GenerationURL;
+
+                    if (requestURL != "")
                     {
-                        EditorUtility.DisplayDialog(
-                            "MeshFilter not found",
-                            "VoxelCollider requires MeshFilter component to be present " +
-                                "on the object when used in combination with MeshRenderer. " +
-                                "Ensure that MeshFilter is attached to the object you're adding this component to.",
-                            "OK");
-                        DestroyImmediate(VoxelCollider);
-
-                        return;
-                    }
-                }
-            }
-            else if (!(renderer is SkinnedMeshRenderer))
-            {
-                EditorUtility.DisplayDialog(
-                    "Unsupported Renderer type",
-                    "VoxelCollider requires MeshRenderer or SkinnedMeshRenderer " +
-                        "attached to the same object to operate correctly. Make sure one of them is present before adding this component.",
-                    "OK");
-                DestroyImmediate(VoxelCollider);
-
-                return;
-            }
-        }
-
-        private void FinishGeneration(VoxelRepresentation result)
-        {
-            EditorUtility.SetDirty(VoxelCollider);
-            Repaint();
-        }
-
-        public override void OnInspectorGUI()
-        {
-            if (VoxelCollider == null)
-            {
-                return;
-            }
-
-            UpdateRequest();
-
-            serializedObject.Update();
-            if (ZibraServerAuthenticationManager.GetInstance().IsKeyRequestInProgress &&
-                !ZibraServerAuthenticationManager.GetInstance().IsLicenseKeyValid)
-            {
-                GUILayout.Label("Licence key validation in progress");
-                return;
-            }
-
-            if (IsGenerating)
-            {
-                GUILayout.Label("Generating collider representation. Please wait.");
-            }
-            else if (!VoxelCollider.HasRepresentation)
-            {
-                EditorGUILayout.HelpBox(
-                    "Representation is absent. Generate it using the button below before entering play mode.",
-                    MessageType.Warning);
-            }
-            else
-            {
-                GUILayout.Label("Representation is present. Collider can be used now.");
-            }
-
-            string generateText = "Generate Representation";
-            if (VoxelCollider.HasRepresentation)
-            {
-                generateText = "Regenerate Representation";
-            }
-            if (IsGenerating)
-            {
-                generateText = "Restart Generation";
-            }
-            if (GUILayout.Button(generateText))
-            {
-                GenerateRepresentation();
-            }
-
-            if (IsGenerating && GUILayout.Button("Stop Generation"))
-            {
-                AbortGeneration();
-            }
-
-            GUILayout.Space(10);
-
-            if (VoxelCollider.GetComponent<Collider>() == null && GUILayout.Button("Add Unity Collider"))
-            {
-                VoxelCollider.gameObject.AddComponent<MeshCollider>();
-            }
-
-            EditorGUILayout.PropertyField(ForceInteraction);
-
-            if (VoxelCollider.ForceInteraction && VoxelCollider.GetComponent<Rigidbody>() == null &&
-                GUILayout.Button("Add Unity Rigidbody"))
-            {
-                VoxelCollider.gameObject.AddComponent<Rigidbody>();
-            }
-
-            if (!IsGenerating && VoxelCollider.HasRepresentation)
-            {
-                GUILayout.Label(
-                    $"Approximate VRAM footprint:{(float)VoxelCollider.GetMemoryFootrpint() / (1 << 20):N2}MB");
-            }
-
-            serializedObject.ApplyModifiedProperties();
-        }
-
-        protected void OnDisable()
-        {
-            OnGenerated -= FinishGeneration;
-            EditorApplication.update -= CheckMeshComponent;
-        }
-
-        public void GenerateRepresentation()
-        {
-            var mesh = VoxelCollider.GetMesh();
-
-            if (mesh == null)
-            {
-                return;
-            }
-
-            if (mesh.triangles.Length / 3 > REQUEST_TRIANGLE_COUNT_LIMIT)
-            {
-                string errorMessage =
-                    $"Mesh is too large. Can't generate representation. Triangle count should not exceed {REQUEST_TRIANGLE_COUNT_LIMIT} triangles, but current mesh have {mesh.triangles.Length / 3} triangles";
-                EditorUtility.DisplayDialog("ZibraLiquid Error.", errorMessage, "OK");
-                Debug.LogError(errorMessage);
-                return;
-            }
-
-            if (!EditorApplication.isPlaying)
-            {
-                VertexCachedBuffer = new Vector3[mesh.vertices.Length];
-                Array.Copy(mesh.vertices, VertexCachedBuffer, mesh.vertices.Length);
-                EditorUtility.SetDirty(this);
-            }
-
-            var meshRepresentation = new MeshRepresentation { vertices = mesh.vertices.Vector3ToString(),
-                                                              faces = mesh.triangles.IntToString() };
-
-            if (CurrentRequest != null)
-            {
-                CurrentRequest.Dispose();
-                CurrentRequest = null;
-            }
-
-            var json = JsonUtility.ToJson(meshRepresentation);
-
-            // 25 megabytes is current limit for representation generation request
-            if (json.Length > REQUEST_SIZE_LIMIT)
-            {
-                string errorMessage =
-                    $"Mesh is too large. Can't generate representation. Please decrease vertex/triangle count. Web request should not exceed {REQUEST_SIZE_LIMIT / (1 << 20):N2}mb, but for current mesh {(float)json.Length / (1 << 20):N2}mb is needed.";
-                EditorUtility.DisplayDialog("ZibraLiquid Error.", errorMessage, "OK");
-                Debug.LogError(errorMessage);
-                return;
-            }
-
-            if (ZibraServerAuthenticationManager.GetInstance().IsLicenseKeyValid)
-            {
-                string requestURL = ZibraServerAuthenticationManager.GetInstance().GenerationURL;
-
-                if (requestURL != "")
-                {
-                    CurrentRequest = UnityWebRequest.Post(requestURL, json);
-                    CurrentRequest.SendWebRequest();
-                }
-            }
-            else
-            {
-                EditorUtility.DisplayDialog("Zibra Liquid Error",
-                                            ZibraServerAuthenticationManager.GetInstance().ErrorText, "Ok");
-                Debug.LogError(ZibraServerAuthenticationManager.GetInstance().ErrorText);
-            }
-        }
-
-        public void AbortGeneration()
-        {
-            if (CurrentRequest != null)
-            {
-                CurrentRequest.Dispose();
-                CurrentRequest = null;
-            }
-        }
-
-        private void UpdateRequest()
-        {
-            if (CurrentRequest != null && CurrentRequest.isDone)
-            {
-                VoxelRepresentation newRepresentation = null;
-
-                if (CurrentRequest.isDone && !CurrentRequest.isHttpError && !CurrentRequest.isNetworkError)
-                {
-                    var json = CurrentRequest.downloadHandler.text;
-                    newRepresentation = JsonUtility.FromJson<VoxelRepresentation>(json);
-
-                    if (string.IsNullOrEmpty(newRepresentation.embeds) ||
-                        string.IsNullOrEmpty(newRepresentation.vox_ids) || newRepresentation.shape <= 0)
-                    {
-                        EditorUtility.DisplayDialog("Zibra Liquid Server Error",
-                                                    "Server returned empty result. Connect ZibraLiquid support", "Ok");
-                        Debug.LogError("Server returned empty result. Connect ZibraLiquid support");
+                        CurrentRequest = UnityWebRequest.Post(requestURL, json);
+                        CurrentRequest.SendWebRequest();
                     }
                 }
                 else
                 {
-                    EditorUtility.DisplayDialog("Zibra Liquid Server Error", CurrentRequest.downloadHandler.text, "Ok");
-                    Debug.LogError(CurrentRequest.downloadHandler.text);
+                    EditorUtility.DisplayDialog("Zibra Liquid Error",
+                                                ZibraServerAuthenticationManager.GetInstance().ErrorText, "Ok");
+                    Debug.LogError(ZibraServerAuthenticationManager.GetInstance().ErrorText);
+                }
+            }
+
+            public void Abort()
+            {
+                CurrentRequest?.Dispose();
+            }
+
+            public void Update()
+            {
+                if (CurrentRequest != null && CurrentRequest.isDone)
+                {
+                    VoxelRepresentation newRepresentation = null;
+
+#if UNITY_2020_2_OR_NEWER
+                    if (CurrentRequest.isDone && CurrentRequest.result == UnityWebRequest.Result.Success)
+#else
+                    if (CurrentRequest.isDone && !CurrentRequest.isHttpError && !CurrentRequest.isNetworkError)
+#endif
+                    {
+                        var json = CurrentRequest.downloadHandler.text;
+                        newRepresentation = JsonUtility.FromJson<VoxelRepresentation>(json);
+
+                        if (string.IsNullOrEmpty(newRepresentation.embeds) ||
+                            string.IsNullOrEmpty(newRepresentation.vox_ids) || newRepresentation.shape <= 0)
+                        {
+                            EditorUtility.DisplayDialog("Zibra Liquid Server Error",
+                                                        "Server returned empty result. Connect ZibraLiquid support",
+                                                        "Ok");
+                            Debug.LogError("Server returned empty result. Connect ZibraLiquid support");
+                        }
+                    }
+                    else
+                    {
+                        EditorUtility.DisplayDialog("Zibra Liquid Server Error", CurrentRequest.error, "Ok");
+                        Debug.LogError(CurrentRequest.downloadHandler.text);
+                    }
+
+                    CurrentRequest.Dispose();
+                    CurrentRequest = null;
+
+                    VoxelColliderInstance.currentRepresentation = newRepresentation;
+                    CreateMeshBBCube();
+                    VoxelColliderInstance.CreateRepresentation();
+                }
+            }
+
+            public bool IsFinished()
+            {
+                return CurrentRequest == null;
+            }
+        }
+
+        static class GenerationQueue
+        {
+            static Queue<VoxelColliderGenerator> CollidersToGenerate = new Queue<VoxelColliderGenerator>();
+
+            static void Update()
+            {
+                CollidersToGenerate.Peek().Update();
+                if (CollidersToGenerate.Peek().IsFinished())
+                {
+                    RemoveFromQueue();
+                    if (CollidersToGenerate.Count > 0)
+                    {
+                        CollidersToGenerate.Peek().Start();
+                    }
+                    if (EditorInstance)
+                    {
+                        EditorInstance.Repaint();
+                    }
+                }
+            }
+
+            static void RemoveFromQueue()
+            {
+                CollidersToGenerate.Dequeue();
+                if (CollidersToGenerate.Count == 0)
+                {
+                    EditorApplication.update -= Update;
+                }
+            }
+
+            static public void AddToQueue(VoxelColliderGenerator generator)
+            {
+                if (!CollidersToGenerate.Contains(generator))
+                {
+                    if (CollidersToGenerate.Count == 0)
+                    {
+                        EditorApplication.update += Update;
+                        generator.Start();
+                    }
+                    CollidersToGenerate.Enqueue(generator);
+                }
+            }
+
+            static public void Abort()
+            {
+                if (CollidersToGenerate.Count > 0)
+                {
+                    CollidersToGenerate.Peek().Abort();
+                    CollidersToGenerate.Clear();
+                    EditorApplication.update -= Update;
+                }
+            }
+
+            static public int GetQueueLength()
+            {
+                return CollidersToGenerate.Count;
+            }
+
+            static public bool IsInQueue(VoxelCollider collider)
+            {
+                foreach (var item in CollidersToGenerate)
+                {
+                    if (item.GetCollider() == collider)
+                        return true;
+                }
+                return false;
+            }
+        }
+
+        private VoxelCollider[] VoxelColliders;
+
+        private SerializedProperty ForceInteraction;
+        private SerializedProperty InvertSDF;
+        private SerializedProperty FluidFriction;
+
+        protected void Awake()
+        {
+            ZibraServerAuthenticationManager.GetInstance().Initialize(true);
+        }
+
+        protected void OnEnable()
+        {
+            EditorInstance = this;
+
+            VoxelColliders = new VoxelCollider[targets.Length];
+
+            for (int i = 0; i < targets.Length; i++)
+            {
+                VoxelColliders[i] = targets[i] as VoxelCollider;
+            }
+
+            ForceInteraction = serializedObject.FindProperty("ForceInteraction");
+            InvertSDF = serializedObject.FindProperty("InvertSDF");
+            FluidFriction = serializedObject.FindProperty("FluidFriction");
+        }
+
+        protected void OnDisable()
+        {
+            if (EditorInstance == this)
+            {
+                EditorInstance = null;
+            }
+        }
+
+        private void GenerateColliders(bool regenerate = false)
+        {
+            foreach (var instance in VoxelColliders)
+            {
+                if (!GenerationQueue.IsInQueue(instance) && (!instance.HasRepresentation || regenerate))
+                {
+                    GenerationQueue.AddToQueue(new VoxelColliderGenerator(instance));
+                }
+            }
+        }
+
+        public override void OnInspectorGUI()
+        {
+            serializedObject.Update();
+
+            if (EditorApplication.isPlaying)
+            {
+                // Don't allow generation in playmode
+            }
+            else if (!ZibraServerAuthenticationManager.GetInstance().IsLicenseKeyValid)
+            {
+                GUILayout.Label("Licence key validation in progress");
+
+                GUILayout.Space(20);
+            }
+            else
+            {
+                int toGenerateCount = 0;
+                int toRegenerateCount = 0;
+
+                foreach (var instance in VoxelColliders)
+                {
+                    if (!GenerationQueue.IsInQueue(instance))
+                    {
+                        if (instance.HasRepresentation)
+                        {
+                            toRegenerateCount++;
+                        }
+                        else
+                        {
+                            toGenerateCount++;
+                        }
+                    }
                 }
 
-                CurrentRequest.Dispose();
-                CurrentRequest = null;
+                int inQueueCount = VoxelColliders.Length - toGenerateCount - toRegenerateCount;
+                int fullQueueLength = GenerationQueue.GetQueueLength();
+                if (fullQueueLength > 0)
+                {
+                    if (fullQueueLength != inQueueCount)
+                    {
+                        if (inQueueCount == 0)
+                        {
+                            GUILayout.Label($"Generating other colliders. {fullQueueLength} left in total.");
+                        }
+                        else
+                        {
+                            GUILayout.Label(
+                                $"Generating colliders. {inQueueCount} left out of selected colliders. {fullQueueLength} colliders left in total.");
+                        }
+                    }
+                    else
+                    {
+                        GUILayout.Label(VoxelColliders.Length > 1 ? $"Generating colliders. {inQueueCount} left."
+                                                                  : "Generating collider.");
+                    }
+                    if (GUILayout.Button("Abort"))
+                    {
+                        GenerationQueue.Abort();
+                    }
 
-                VoxelCollider.currentRepresentation = newRepresentation;
-                CreateMeshBBCube();
-                VoxelCollider.CreateRepresentation();
+                    GUILayout.Space(10);
+                }
 
-                OnGenerated?.Invoke(newRepresentation);
+                if (toGenerateCount > 0)
+                {
+                    GUILayout.Label(VoxelColliders.Length > 1
+                                        ? $"{toGenerateCount} colliders doesn't have representation."
+                                        : "Collider doesn't have representation.");
+                    if (GUILayout.Button(VoxelColliders.Length > 1 ? "Generate colliders" : "Generate collider"))
+                    {
+                        GenerateColliders();
+                    }
+                }
+
+                if (toRegenerateCount > 0)
+                {
+                    GUILayout.Label(VoxelColliders.Length > 1 ? $"{toRegenerateCount} colliders already generated."
+                                                              : "Collider already generated.");
+                    if (GUILayout.Button(VoxelColliders.Length > 1 ? "Regenerate all selected colliders"
+                                                                   : "Regenerate collider"))
+                    {
+                        GenerateColliders(true);
+                    }
+                }
+
+                if (toGenerateCount != 0 || toRegenerateCount != 0)
+                {
+                    GUILayout.Space(10);
+                }
             }
+
+            bool isColliderComponentMissing = false;
+            foreach (var instance in VoxelColliders)
+            {
+                if (instance.GetComponent<Collider>() == null)
+                {
+                    isColliderComponentMissing = true;
+                    break;
+                }
+            }
+
+            if (isColliderComponentMissing &&
+                GUILayout.Button(VoxelColliders.Length > 1 ? "Add Unity Colliders" : "Add Unity Collider"))
+            {
+                foreach (var instance in VoxelColliders)
+                {
+                    if (instance.GetComponent<Collider>() == null)
+                    {
+                        instance.gameObject.AddComponent<MeshCollider>();
+                    }
+                }
+            }
+
+            EditorGUILayout.PropertyField(FluidFriction);
+            EditorGUILayout.PropertyField(ForceInteraction);
+            EditorGUILayout.PropertyField(InvertSDF);
+
+            bool isRigidbodyComponentMissing = false;
+            foreach (var instance in VoxelColliders)
+            {
+                if (instance.ForceInteraction && instance.GetComponent<Rigidbody>() == null)
+                {
+                    isRigidbodyComponentMissing = true;
+                    break;
+                }
+            }
+
+            if (isRigidbodyComponentMissing &&
+                GUILayout.Button(VoxelColliders.Length > 1 ? "Add Unity Rigidbodies" : "Add Unity Rigidbody"))
+            {
+                foreach (var instance in VoxelColliders)
+                {
+                    if (instance.ForceInteraction && instance.GetComponent<Rigidbody>() == null)
+                    {
+                        instance.gameObject.AddComponent<Rigidbody>();
+                    }
+                }
+            }
+
+            ulong totalMemoryFootprint = 0;
+            foreach (var instance in VoxelColliders)
+            {
+                if (instance.HasRepresentation)
+                {
+                    totalMemoryFootprint += instance.GetMemoryFootrpint();
+                }
+            }
+
+            if (totalMemoryFootprint != 0)
+            {
+                GUILayout.Space(10);
+
+                if (VoxelColliders.Length > 1)
+                {
+                    GUILayout.Label("Multiple voxel colliders selected. Showing sum of all selected instances.");
+                }
+                GUILayout.Label($"Approximate VRAM footprint:{(float)totalMemoryFootprint / (1 << 20):N2}MB");
+            }
+
+            serializedObject.ApplyModifiedProperties();
         }
     }
 }

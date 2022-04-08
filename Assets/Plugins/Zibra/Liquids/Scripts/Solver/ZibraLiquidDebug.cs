@@ -21,15 +21,7 @@ namespace com.zibra.liquid.Solver
             Debug.Log(Marshal.PtrToStringAnsi(request));
         }
 
-#if (UNITY_IOS || UNITY_TVOS || UNITY_WEBGL) && !UNITY_EDITOR
-        [DllImport("__Internal")]
-#elif UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
-        [DllImport("ZibraFluidNative_Mac_x64")]
-#elif UNITY_64 || UNITY_EDITOR_64
-        [DllImport("ZibraFluidNative_Win_x64")]
-#else
-        [DllImport("ZibraFluidNative_Win_x86")]
-#endif
+        [DllImport(ZibraLiquidBridge.PluginLibraryName)]
         static extern void SetDebugLogWrapperPointer(debugLogCallback callback);
     }
 }

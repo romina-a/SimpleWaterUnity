@@ -7,6 +7,7 @@
     "includePlatforms": [
         "Editor",
         "macOSStandalone",
+        "WSA",
         "WindowsStandalone32",
         "WindowsStandalone64"
     ],

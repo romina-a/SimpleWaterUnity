@@ -46,7 +46,8 @@ namespace com.zibra.liquid.Foundation.UIElements
     /// </summary>
     public HelpBox()
     {
-        Add(new IMGUIContainer(() => { EditorGUILayout.HelpBox(Text, MessageType, true); }));
+        Add(new IMGUIContainer(() =>
+                               { EditorGUILayout.HelpBox(Text, MessageType, true); }));
     }
 }
 }

@@ -20,11 +20,18 @@ namespace com.zibra.liquid.SDFObjects
     // Use "EditorApplication.isPlaying" for play mode only check.
     // Encase this check and "using UnityEditor" in "#if UNITY_EDITOR" preprocessor directive to prevent build errors
     [AddComponentMenu("Zibra/Zibra Voxel Collider")]
+    [RequireComponent(typeof(MeshRenderer))]
+    [RequireComponent(typeof(MeshFilter))]
     public class VoxelCollider : SDFCollider
     {
         private const int EMBED_COORDINATES_COUNT = 3;
-        private const int GRID_SIZE = 32 * 32 * 32;
+        private const int SDF_APPROX_DIMENSION = 40;
+        private const int SDF_GRID_DIMENSION = 32;
+        private const int GRID_SIZE = SDF_GRID_DIMENSION * SDF_GRID_DIMENSION * SDF_GRID_DIMENSION;
+        private const int SDF_APPX_SIZE = SDF_APPROX_DIMENSION * SDF_APPROX_DIMENSION * SDF_APPROX_DIMENSION;
         private const int EMBEDDING_SIZE = 29;
+        private const int ALIGNED_EMBEDDING_SIZE = 32;
+        private const int VOXEL_COUNT_ALIGNMENT = 32;
 
         private int VoxelCount;
 
@@ -40,10 +47,6 @@ namespace com.zibra.liquid.SDFObjects
         [HideInInspector]
         public bool HasRepresentation;
 
-        private ComputeBuffer[] VoxelIDGrid;
-        private ComputeBuffer VoxelPositions;
-        private ComputeBuffer VoxelEmbeddings;
-
         private VoxelEmbedding[] VoxelInfo;
 
         public void CreateRepresentation()
@@ -56,83 +59,58 @@ namespace com.zibra.liquid.SDFObjects
             }
         }
 
-        public void Initialize(int InstanceID)
+        void OnDrawGizmosSelected()
         {
-            if (IsInitialized.Contains(InstanceID))
-                return;
+            Gizmos.color = Color.grey;
+            Gizmos.matrix = transform.localToWorldMatrix;
+            Gizmos.DrawWireCube(0.5f * (BoundingBoxMin + BoundingBoxMax), (BoundingBoxMin - BoundingBoxMax));
+        }
 
-            if (IsInitialized.Count == 0) // if has not been initialized at all
+        void OnDrawGizmos()
+        {
+            OnDrawGizmosSelected();
+        }
+
+        public override void InitializeConstData()
+        {
+            ColliderIndex = AllColliders.IndexOf(this);
+            HasRepresentation = false;
+            CreateRepresentation();
+
+            int alignedVoxelCount = ((VoxelCount + (VOXEL_COUNT_ALIGNMENT - 1)) & (~(VOXEL_COUNT_ALIGNMENT - 1)));
+            int arraySize = alignedVoxelCount + VoxelCount * ALIGNED_EMBEDDING_SIZE + SDF_APPX_SIZE;
+            Array.Resize<float>(ref ConstAdditionalData, arraySize);
+
+            for (var i = 0; i < VoxelCount; i++)
+            {
+                VoxelEmbedding cur = VoxelInfo[i];
+
+                Array.Copy(cur.embedding, 0, ConstAdditionalData, i * ALIGNED_EMBEDDING_SIZE + alignedVoxelCount,
+                           EMBEDDING_SIZE);
+                ConstAdditionalData[i] = cur.coords.x + SDF_GRID_DIMENSION * cur.coords.y +
+                                         SDF_GRID_DIMENSION * SDF_GRID_DIMENSION * cur.coords.z;
+            }
+        }
+
+        public void Initialize()
+        {
+            ManipType = ManipulatorType.VoxelCollider;
+
+            if (!isInitialized) // if has not been initialized at all
             {
                 ColliderIndex = AllColliders.IndexOf(this);
                 HasRepresentation = false;
                 CreateRepresentation();
 
-#if UNITY_EDITOR
-                if (!EditorApplication.isPlaying)
-                {
-                    return;
-                }
-#endif
-
-                // initialize compute buffers
-                VoxelIDGrid = new ComputeBuffer[2];
-                VoxelIDGrid[0] = new ComputeBuffer(GRID_SIZE, 4 * sizeof(float));
-                VoxelIDGrid[1] = new ComputeBuffer(GRID_SIZE, 4 * sizeof(float));
-                VoxelPositions = new ComputeBuffer(VoxelCount, 4 * sizeof(int));
-                VoxelEmbeddings = new ComputeBuffer(EMBEDDING_SIZE * VoxelCount, sizeof(float));
-
-                float[] EmbeddingsArray = new float[] {};
-                int[] VoxPositionArray = new int[] {};
-
-                Array.Resize<float>(ref EmbeddingsArray, VoxelCount * EMBEDDING_SIZE);
-                Array.Resize<int>(ref VoxPositionArray, VoxelCount * 4);
-
-                for (var i = 0; i < VoxelCount; i++)
-                {
-                    VoxelEmbedding cur = VoxelInfo[i];
-
-                    Array.Copy(cur.embedding, 0, EmbeddingsArray, i * EMBEDDING_SIZE, EMBEDDING_SIZE);
-                    VoxPositionArray[i * 4 + 0] = cur.coords.x;
-                    VoxPositionArray[i * 4 + 1] = cur.coords.y;
-                    VoxPositionArray[i * 4 + 2] = cur.coords.z;
-                }
-
                 colliderParams.CurrentID = ColliderIndex;
-                colliderParams.VoxelNum = VoxelCount;
+                colliderParams.VoxelCount = VoxelCount;
                 colliderParams.BBoxMin = BoundingBoxMin;
                 colliderParams.BBoxMax = BoundingBoxMax;
                 colliderParams.colliderIndex = ColliderIndex;
 
-                CommandBuffer VoxelColliderCreation = new CommandBuffer();
-
-                // Have to be before RegisterVoxelCollider
-                // Otherwise it breaks Metal
-                VoxelPositions.SetData(VoxPositionArray);
-                VoxelEmbeddings.SetData(EmbeddingsArray);
-
-                Marshal.StructureToPtr(colliderParams, NativeDataPtr, true);
-
-                ZibraLiquidBridge.RegisterVoxelCollider(
-                    InstanceID, VoxelIDGrid[0].GetNativeBufferPtr(), VoxelIDGrid[1].GetNativeBufferPtr(),
-                    VoxelPositions.GetNativeBufferPtr(), VoxelEmbeddings.GetNativeBufferPtr(), VoxelCount,
-                    ColliderIndex);
-
-                VoxelColliderCreation.IssuePluginEventAndData(
-                    ZibraLiquidBridge.RunSDFShaderWithDataPtr(),
-                    ZibraLiquidBridge.EventAndInstanceID(ZibraLiquidBridge.EventID.PrepareSDF, InstanceID),
-                    NativeDataPtr);
-
-                Graphics.ExecuteCommandBuffer(VoxelColliderCreation);
+                AdditionalData.x = (float)chosenSDFType;
+                AdditionalData.y = (float)VoxelCount;
             }
-            else // If was initialized more than 0 times then just register the buffers
-            {
-                ZibraLiquidBridge.RegisterVoxelCollider(
-                    InstanceID, VoxelIDGrid[0].GetNativeBufferPtr(), VoxelIDGrid[1].GetNativeBufferPtr(),
-                    VoxelPositions.GetNativeBufferPtr(), VoxelEmbeddings.GetNativeBufferPtr(), VoxelCount,
-                    ColliderIndex);
-            }
-
-            IsInitialized.Add(InstanceID);
         }
 
         // on game start
@@ -140,46 +118,11 @@ namespace com.zibra.liquid.SDFObjects
         {
             colliderParams = new ColliderParams();
             NativeDataPtr = Marshal.AllocHGlobal(Marshal.SizeOf(colliderParams));
+            ManipType = ManipulatorType.VoxelCollider;
+            Initialize();
         }
 
-        public VoxelEmbedding[] UnpackRepresentation()
-        {
-            if (currentRepresentation == null || string.IsNullOrEmpty(currentRepresentation.embeds) ||
-                string.IsNullOrEmpty(currentRepresentation.vox_ids))
-            {
-                return null;
-            }
-
-            var embeddings = currentRepresentation.embeds.StringToFloat();
-            var voxIds = currentRepresentation.vox_ids.StringToInt();
-
-            VoxelCount = voxIds.Length / EMBED_COORDINATES_COUNT;
-
-            if (currentRepresentation.shape == 0 || currentRepresentation.shape != EMBEDDING_SIZE ||
-                (embeddings.Length % currentRepresentation.shape) != 0 ||
-                (voxIds.Length % EMBED_COORDINATES_COUNT) != 0 ||
-                (embeddings.Length / currentRepresentation.shape) != (voxIds.Length / EMBED_COORDINATES_COUNT))
-            {
-                Debug.LogError("Incorrect data format after parsing base64 strings");
-                return null;
-            }
-
-            var unpackedRepresentation = new VoxelEmbedding[VoxelCount];
-
-            for (var i = 0; i < unpackedRepresentation.Length; i++)
-            {
-                var currentEmbedding = new float[currentRepresentation.shape];
-                Array.Copy(embeddings, i * currentRepresentation.shape, currentEmbedding, 0,
-                           currentRepresentation.shape);
-                unpackedRepresentation[i] =
-                    new VoxelEmbedding() { coords = new Vector3Int(voxIds[i * EMBED_COORDINATES_COUNT],
-                                                                   voxIds[i * EMBED_COORDINATES_COUNT + 1],
-                                                                   voxIds[i * EMBED_COORDINATES_COUNT + 2]),
-                                           embedding = currentEmbedding };
-            }
-
-            return unpackedRepresentation;
-        }
+#if UNITY_EDITOR
 
         public Mesh GetMesh()
         {
@@ -242,71 +185,57 @@ namespace com.zibra.liquid.SDFObjects
 #endif
             return null;
         }
+#endif
 
-        protected void OnDestroy()
+        public VoxelEmbedding[] UnpackRepresentation()
         {
-            if (IsInitialized.Count > 0)
+            if (currentRepresentation == null || string.IsNullOrEmpty(currentRepresentation.embeds) ||
+                string.IsNullOrEmpty(currentRepresentation.vox_ids))
             {
-                if (VoxelIDGrid != null)
-                {
-                    VoxelIDGrid[0]?.Release();
-                    VoxelIDGrid[1]?.Release();
-                }
-                VoxelPositions?.Release();
-                VoxelEmbeddings?.Release();
-
-                IsInitialized.Clear();
+                return null;
             }
+
+            var embeddings = currentRepresentation.embeds.StringToFloat();
+            var voxIds = currentRepresentation.vox_ids.StringToInt();
+
+            VoxelCount = voxIds.Length / EMBED_COORDINATES_COUNT;
+
+            if (currentRepresentation.shape == 0 || currentRepresentation.shape != EMBEDDING_SIZE ||
+                (embeddings.Length % currentRepresentation.shape) != 0 ||
+                (voxIds.Length % EMBED_COORDINATES_COUNT) != 0 ||
+                (embeddings.Length / currentRepresentation.shape) != (voxIds.Length / EMBED_COORDINATES_COUNT))
+            {
+                Debug.LogError("Incorrect data format after parsing base64 strings");
+                return null;
+            }
+
+            var unpackedRepresentation = new VoxelEmbedding[VoxelCount];
+
+            for (var i = 0; i < unpackedRepresentation.Length; i++)
+            {
+                var currentEmbedding = new float[currentRepresentation.shape];
+                Array.Copy(embeddings, i * currentRepresentation.shape, currentEmbedding, 0,
+                           currentRepresentation.shape);
+                unpackedRepresentation[i] =
+                    new VoxelEmbedding() { coords = new Vector3Int(voxIds[i * EMBED_COORDINATES_COUNT],
+                                                                   voxIds[i * EMBED_COORDINATES_COUNT + 1],
+                                                                   voxIds[i * EMBED_COORDINATES_COUNT + 2]),
+                                           embedding = currentEmbedding };
+            }
+
+            return unpackedRepresentation;
         }
 
-        private void ComputeSDF_Shader(int InstanceID, CommandBuffer SolverCommandBuffer, ComputeBuffer Coordinates,
-                                       ComputeBuffer Output, ComputeBuffer OutputID, int ID, int Elements,
-                                       CalculationType type)
+        public override ulong GetMemoryFootrpint()
         {
-            Initialize(InstanceID);
-
-            Vector3 position = transform.position;
-            Quaternion rotation = transform.rotation;
-            Vector3 scale = transform.lossyScale;
-            Vector3 newpos =
-                position; // + *rotation*new Vector3(meshcenter.x*scale.x, meshcenter.y*scale.y, meshcenter.z*scale.z);
-
-            colliderParams.Position = newpos;
-            colliderParams.Rotation = new Vector4(rotation.x, rotation.y, rotation.z, rotation.w);
-            colliderParams.Scale = scale;
-            colliderParams.Elements = Elements;
-            colliderParams.OpType = (int)type;
-            colliderParams.CurrentID = ID;
-            colliderParams.VoxelNum = VoxelCount;
-            colliderParams.BBoxMin = BoundingBoxMin;
-            colliderParams.BBoxMax = BoundingBoxMax;
-            colliderParams.colliderIndex = ColliderIndex;
-
-            Marshal.StructureToPtr(colliderParams, NativeDataPtr, true);
-            SolverCommandBuffer.IssuePluginEventAndData(
-                ZibraLiquidBridge.RunSDFShaderWithDataPtr(),
-                ZibraLiquidBridge.EventAndInstanceID(ZibraLiquidBridge.EventID.ComputeNeuralSDF, InstanceID),
-                NativeDataPtr);
-        }
-
-        /*Compute the SDF and unite it with the SDF in Output*/
-        public override void ComputeSDF_Unite(int InstanceID, CommandBuffer SolverCommandBuffer,
-                                              ComputeBuffer Coordinates, ComputeBuffer Output, ComputeBuffer OutputID,
-                                              int ID, int Elements)
-        {
-            ComputeSDF_Shader(InstanceID, SolverCommandBuffer, Coordinates, Output, OutputID, ID, Elements,
-                              CalculationType.Unite);
-        }
-        public override int GetMemoryFootrpint()
-        {
-            int result = 0;
+            ulong result = 0;
             if (currentRepresentation.vox_ids == null)
                 return result;
 
             result += GRID_SIZE * 4 * sizeof(int);       // VoxelPositions
             result += 2 * GRID_SIZE * 4 * sizeof(float); // VoxelIDGrid
             VoxelCount = currentRepresentation.vox_ids.StringToInt().Length / EMBED_COORDINATES_COUNT;
-            result += EMBEDDING_SIZE * VoxelCount * sizeof(float); // VoxelEmbeddings
+            result += (ulong)(EMBEDDING_SIZE * VoxelCount * sizeof(float)); // VoxelEmbeddings
 
             return result;
         }

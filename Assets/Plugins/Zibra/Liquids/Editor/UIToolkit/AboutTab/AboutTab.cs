@@ -28,7 +28,7 @@ namespace com.zibra.liquid.Plugins.Editor
             m_InvalidKeyLabel = this.Q<Label>("invalidKeyLabel");
             m_RegisteredKeyLabel = this.Q<Label>("registeredKeyLabel");
 
-            ZibraServerAuthenticationManager.GetInstance().Initialize();
+            ZibraServerAuthenticationManager.GetInstance().Initialize(true);
             m_RegisterAuthKeyBtn.clicked += OnRegisterAuthKeyBtnOnClickedHandler;
             m_AuthKeyInputField.value = ZibraServerAuthenticationManager.GetInstance().PluginLicenseKey;
             m_CheckAuthKeyBtn.clicked += OnAuthKeyBtnOnClickedHandler;

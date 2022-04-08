@@ -88,7 +88,7 @@ Shader "Romina/WaterShader4"
 			if (pic > 0)
 			{
 				float4 newvertex;
-				if (1){
+				if (0){
 					// reflecting the points above the water plane on the water plane, chosen direction dir
 					// pointOnWaterPlane (.) wn + w = 0
 					float w = - dot(pointOnWaterPlane, wn);
